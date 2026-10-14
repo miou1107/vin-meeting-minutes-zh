@@ -20,7 +20,6 @@ edits into <name>.md, --accept-current (refuses if the Doc changed again after t
 """
 import hashlib
 import json
-import os
 import re
 import sys
 import tempfile
@@ -30,13 +29,14 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-OWNER = os.environ.get('MINUTES_OWNER', '').strip().lower()     # optional: warn when the Doc is owned by someone else
 DOC_MIME = 'application/vnd.google-apps.document'
 DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 AUTH = {}
 
 sys.path.insert(0, str(Path(__file__).parent))
-from google_setup import access_token, company_domain  # noqa: E402  (re-exported for notify.py)
+from google_setup import access_token, company_domain, owner  # noqa: E402  (re-exported for notify.py)
+
+OWNER = owner()                 # optional: warn when the Doc is owned by someone else
 
 
 def call(url, body=None, method=None, headers=None, raw=False):
@@ -177,7 +177,7 @@ def main():
     if method == 'POST':
         domain = company_domain((doc.get('owners') or [{}])[0].get('emailAddress', ''))
         if not domain:
-            print('NOT SHARED: no company domain (personal Google account, or MINUTES_SHARE_DOMAIN=none); the user shares the Doc by hand')
+            print('NOT SHARED: no company domain (personal Google account, or share_domain set to none); the user shares the Doc by hand')
         else:
             try:
                 print(f'SHARED {domain} as {share_with_company(doc["id"], domain)}')

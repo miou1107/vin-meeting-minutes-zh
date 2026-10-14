@@ -5,7 +5,13 @@ Usage:
   google_setup.py login     open Google's consent page and save the token (pip3 install google-auth-oauthlib);
                             waits up to 10 minutes for the user, so run it with a long timeout
 
-Files live in $MINUTES_HOME, default ~/.config/vin-meeting-minutes-zh/:
+Everything that belongs to the user lives in $MINUTES_HOME, default ~/.config/vin-meeting-minutes-zh/, never in
+the skill folder, so updating or sharing the skill cannot overwrite or leak it:
+  settings.json       {"owner": "name@company.com", "sender_name": "...", "our_company": "...", "share_domain": "...",
+                       "transcript_search": "...", "style": {...}}; every key optional, an empty value counts as unset;
+                      a non-empty MINUTES_OWNER / MINUTES_SENDER_NAME / MINUTES_SHARE_DOMAIN overrides the file
+  notes.md            the user's own extra rules and real examples for the AI (SKILL.md says when to read it)
+  glossary.md         the company's own misheard words, used together with references/glossary.md
   oauth-client.json   the user's own OAuth client (type: Desktop app) from their own Google Cloud project
   google-token.json   the refresh token saved by `login`, plus the account and its company domain; never printed
 
@@ -15,7 +21,8 @@ minutes), Calendar (meeting time, room and attendees; the next meeting's invite)
 
 The "company domain" is the Google Workspace domain of the signed-in account, as Google reports it at login
 (personal accounts have none). A new Doc is shared with it as commenter, and colleagues on it get edit access
-when the minutes are mailed. $MINUTES_SHARE_DOMAIN overrides both; set it to "none" for no company domain.
+when the minutes are mailed. share_domain in settings.json (or $MINUTES_SHARE_DOMAIN) overrides it; "none" means
+no company domain.
 """
 from __future__ import annotations
 
@@ -30,6 +37,7 @@ from pathlib import Path
 
 CONFIG = Path(os.environ.get('MINUTES_HOME') or '~/.config/vin-meeting-minutes-zh').expanduser()
 CLIENT = CONFIG / 'oauth-client.json'
+SETTINGS = CONFIG / 'settings.json'
 TOKEN = CONFIG / 'google-token.json'
 SCOPES = ['openid',
           'https://www.googleapis.com/auth/userinfo.email',
@@ -43,6 +51,47 @@ SCOPES = ['openid',
 PERSONAL_DOMAINS = {'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.com.tw', 'hotmail.com', 'hotmail.com.tw',
                     'outlook.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'mac.com', 'msa.hinet.net',
                     'hinet.net', 'pchome.com.tw', 'seed.net.tw', 'kimo.com', 'proton.me', 'protonmail.com'}
+
+
+SETTING_KEYS = ('owner', 'sender_name', 'our_company', 'share_domain', 'transcript_search', 'style')
+_WARNED = []
+
+
+def read_settings() -> tuple[dict, str]:
+    """(settings, problem); problem is '' when the file is missing or fine."""
+    if not SETTINGS.exists():
+        return {}, ''
+    try:
+        data = json.loads(SETTINGS.read_text(encoding='utf-8-sig'))   # -sig: Notepad saves a BOM
+    except (OSError, ValueError) as err:
+        return {}, f'cannot read {SETTINGS} ({err})'
+    if not isinstance(data, dict):
+        return {}, f'{SETTINGS} must hold a JSON object {{...}}'
+    return data, ''
+
+
+def settings() -> dict:
+    data, problem = read_settings()
+    if problem and not _WARNED:                     # never crash on it, but never ignore it silently either
+        _WARNED.append(problem)
+        print(f'WARNING: {problem}; running without it', file=sys.stderr)
+    return data
+
+
+def setting(key: str, env: str) -> str:
+    """A non-empty environment variable first, then settings.json; '' when neither is set."""
+    value = (os.environ.get(env) or '').strip()
+    if not value:
+        value = str(settings().get(key) or '').strip()
+    return value
+
+
+def owner() -> str:
+    return setting('owner', 'MINUTES_OWNER').lower()
+
+
+def sender_name() -> str:
+    return setting('sender_name', 'MINUTES_SENDER_NAME')
 
 
 def client_info() -> dict | None:
@@ -76,10 +125,9 @@ def access_token() -> str:
 
 
 def company_domain(email: str) -> str | None:
-    override = os.environ.get('MINUTES_SHARE_DOMAIN')
-    if override is not None:
-        override = override.strip().lower().lstrip('@')
-        return None if override in ('', 'none') else override
+    override = setting('share_domain', 'MINUTES_SHARE_DOMAIN').lower().lstrip('@')
+    if override:                            # only an explicit "none" turns the company domain off
+        return None if override == 'none' else override
     try:
         token = saved_token()
     except (OSError, ValueError):
@@ -113,6 +161,14 @@ def probe(token: str, name: str, url: str):
 
 def check():
     print(f'settings folder: {CONFIG}')
+    mine, problem = read_settings()
+    if problem:
+        print(f'[ ] settings.json: {problem}')
+    else:
+        shown = {k: mine[k] for k in SETTING_KEYS if k in mine}
+        print('    settings.json: ' + (json.dumps(shown, ensure_ascii=False) if shown else 'none yet (optional)'))
+    print('    notes.md: ' + ('yes' if (CONFIG / 'notes.md').exists() else 'none')
+          + ' | glossary.md: ' + ('yes' if (CONFIG / 'glossary.md').exists() else 'none'))
     if not CLIENT.exists():
         print('[ ] OAuth client: missing')
         print('NEXT: SKILL.md section 6, step 9, items 1-4 (Cloud project, four APIs, consent screen, '
@@ -177,7 +233,7 @@ def login():
         sys.exit('STOP: run pip3 install google-auth-oauthlib first')
     os.environ.setdefault('OAUTHLIB_RELAX_TOKEN_SCOPE', '1')   # an unticked permission is reported below, not a crash
     flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT), SCOPES)
-    hint = {'login_hint': os.environ['MINUTES_OWNER']} if os.environ.get('MINUTES_OWNER') else {}
+    hint = {'login_hint': owner()} if owner() else {}
     creds = flow.run_local_server(port=0, open_browser=True, prompt='consent', timeout_seconds=600,
                                   authorization_prompt_message='Opening the consent page. If no browser opens, '
                                                                'give the user this link: {url}', **hint)

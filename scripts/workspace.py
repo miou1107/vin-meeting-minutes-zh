@@ -10,9 +10,9 @@ Usage:
   workspace.py invite <YYYY-MM-DD> <HH:MM-HH:MM> <title> <room> <email,...>       preview an invite
   workspace.py invite ... --send --confirm <code> [--again]                       create it and email the invitees
 
-Needs the Google sign-in from google_setup.py. When $MINUTES_OWNER is set, every command first checks that
-the signed-in mailbox is that address and stops otherwise, so nothing is ever read from or sent as another
-mailbox. $MINUTES_SENDER_NAME, if set, is the display name on sent mail.
+Needs the Google sign-in from google_setup.py. When an owner is set (settings.json "owner" or $MINUTES_OWNER),
+every command first checks that the signed-in mailbox is that address and stops otherwise, so nothing is ever
+read from or sent as another mailbox. "sender_name" (or $MINUTES_SENDER_NAME) is the display name on sent mail.
 
 Nothing goes out without the user: the preview prints a confirm code computed from exactly what would be
 sent (recipients, subject or title, body or time and room). --send needs that code, so if anything was
@@ -28,7 +28,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import os
 import re
 import sys
 import urllib.error
@@ -40,9 +39,6 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 from pathlib import Path
 
-OWNER = os.environ.get('MINUTES_OWNER', '').strip().lower()     # filled in by check_owner()
-COMPANY = None                                                   # the signed-in account's company domain
-SENDER_NAME = os.environ.get('MINUTES_SENDER_NAME', '').strip()
 GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me'
 CALENDARS = 'https://www.googleapis.com/calendar/v3'
 PEOPLE = 'https://people.googleapis.com/v1'
@@ -51,7 +47,11 @@ ADDRESS = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
 AUTH = {}
 
 sys.path.insert(0, str(Path(__file__).parent))
-from google_setup import access_token, company_domain, same_company  # noqa: E402
+from google_setup import access_token, company_domain, owner, same_company, sender_name  # noqa: E402
+
+OWNER = owner()                 # settings.json owner or $MINUTES_OWNER; filled in by check_owner() when empty
+COMPANY = None                  # the signed-in account's company domain
+SENDER_NAME = sender_name()     # settings.json sender_name or $MINUTES_SENDER_NAME
 
 
 def call(url, body=None):

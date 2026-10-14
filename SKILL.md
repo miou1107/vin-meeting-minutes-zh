@@ -1,5 +1,7 @@
 ---
 name: "vin-meeting-minutes-zh"
+metadata:
+  version: "1.0.0"
 description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成使用者自己公司帳號底下的 Google 文件；這台電腦沒有 Google 登入時改交 Word 檔。所有專案、所有客戶（政府機關、企業、公司內部會議）整理會議紀錄都用這一個 skill；用在使用者貼上或指定逐字稿、丟一個 Gmail 連結，或說「整理今天的會議」「整理會議記錄」時；設定好 Gmail 授權後，可以從使用者的 Gmail 抓逐字稿、從行事曆抓與會人員，整理完把信件給他看，他說發信就從他的 Gmail 寄出。第一次要用 Google 文件、Gmail、行事曆，或使用者說「設定會議紀錄的 Google 連線」時，一步一步帶他完成 Google 設定。"
 ---
 
@@ -10,6 +12,28 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
 
 逐字稿一律由使用者提供，這個 skill 不做錄音轉寫。
 
+## 資料放在哪裡：skill、使用者、專案三處分開
+
+skill 資料夾會被更新覆蓋，也可能被分享出去，所以裡面不放任何個人、公司或專案的資料。
+使用者在對話裡給的資訊，照下表寫到對的位置；更新 skill 時這些檔案都不會被動到，會一直累積下去。
+
+| 放什麼 | 放在哪裡 | 什麼時候寫 |
+|---|---|---|
+| 使用者信箱、寄件署名、我方公司簡稱、分享網域、找逐字稿信件的搜尋條件、Word 與 Google 文件的字型和顏色 | `$MINUTES_HOME/settings.json`（`owner`、`sender_name`、`our_company`、`share_domain`、`transcript_search`、`style`，都可省略） | 第一次用到時問一次；使用者要換字型或顏色時寫進 `style` |
+| 使用者自己的規則、偏好、慣用語氣、親手改過的句子、判斷時要參考的實例 | `$MINUTES_HOME/notes.md` | 使用者說「以後都這樣」、改了紀錄或信件的寫法時，當場寫進去 |
+| 使用者公司跨專案都會用到的詞（自家系統名、產品名的聽錯寫法） | `$MINUTES_HOME/glossary.md` | 使用者確認過才寫 |
+| Google 登入 | `$MINUTES_HOME/oauth-client.json`、`google-token.json` | 第 6 節第 9 步 |
+| 這個專案的聽錯字、人員與分工、Drive 資料夾、歷次紀錄 | 專案資料夾的 `會議紀錄/`（`用詞對照.md`、`人員對照.md`、`設定.md`、每場紀錄的 `.md`） | 每場會議交付時與使用者更正時（第 8 節） |
+
+`$MINUTES_HOME` 預設是 `~/.config/vin-meeting-minutes-zh/`。
+
+使用者說「更新會議紀錄 skill」時，照第 8 節第 6 點更新。
+
+- 每次開始前讀 `notes.md`（有的話）；裡面的規則跟這份 skill 衝突時，照 `notes.md`。
+  只有兩條不能被 `notes.md` 改掉：寄信和建立會議邀請前一定先給使用者看、等他同意；對外會議一定刪除內部討論。
+- `notes.md` 用三個小標分開：「規則」「偏好與語氣」「實例」。寫進去時記日期與使用者的原話。
+- `scripts/google_setup.py check` 會列出這個資料夾裡已經有哪些設定。
+
 ## 0. 使用者只丟一個 Gmail 連結或說「整理今天的會議」時，整套照這個順序跑完
 
 這一節要先完成第 6 節第 9 步的 Google 設定；還沒設定時，問使用者要現在設定，還是先直接貼上逐字稿，從第 2 步開始。
@@ -17,8 +41,10 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
 常見的情況是使用者用手機錄音，錄音 App 把逐字稿當附件寄到他的信箱。他只會給一個 Gmail 連結，或說「整理今天下午那場」。
 中間不用問他，最後只把信件給他看，他回「發信」就寄。
 
-1. 抓逐字稿：`scripts/workspace.py pull "has:attachment filename:txt newer_than:2d" <暫存資料夾>`，
-   依附件檔名裡的錄音時間（語音 261014_145212 是 14:52:12 開始錄）挑對那一封，`.utf8.txt` 是轉好的文字。
+1. 抓逐字稿：`scripts/workspace.py pull "<搜尋條件>" <暫存資料夾>`。搜尋條件用 `settings.json` 的 `transcript_search`，
+   沒有就用 `has:attachment filename:txt newer_than:2d`。依附件檔名裡的錄音時間挑對那一封
+   （例如「語音 261014_145212」是 14:52:12 開始錄；別的錄音 App 檔名不同，看過一次就記進 `notes.md`），`.utf8.txt` 是轉好的文字。
+   使用者的錄音 App 寄信方式跟預設條件對不上時，找到對的條件後寫進 `transcript_search`。
    Gmail 網址裡那串編號不是 API 用的編號，不要拿去查；不要加 `from:me`，App 寄的信寄件人不一定是使用者本人。
    逐字稿存一份到專案的 `docs/<日期>-transcript-raw.txt`。
 2. 補背景（第 1 節第 2 點）：專案交接說明、前幾次會議紀錄、舊對話、行事曆、與會者各自負責什麼。
@@ -64,14 +90,14 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
      再從交接說明、簡報找他負責的事，補進人員對照，交付時請使用者確認新加的那幾列。
    前次紀錄只沿用它的專有名詞與稱呼；章節一律用第 3 節的格式，所有專案同一個標準。
    客戶稱呼照這個案子既有文件的寫法（政府案常寫「機關」，場館常寫「館方」，企業寫公司簡稱）。
-   我方一律寫使用者公司的簡稱，記在 `~/.config/vin-meeting-minutes-zh/我方名稱.txt`（所有專案共用）。
-   這個檔還沒有時，先從專案文件找公司名稱，找不到就先寫「本公司」；交付時問使用者一次，寫進那個檔，之後不再問。
+   我方一律寫 `settings.json` 的 `our_company`。還沒設定時，先從專案文件找公司名稱，找不到就先寫「本公司」；
+   交付時問使用者一次，寫進 `settings.json`，之後不再問。
 
 3. **從行事曆邀請直接取值**：會議名稱、日期、起訖時間、地點、主持人、與會人員都照邀請填，不要再問。
    使用者說「日期是今天」就填當天。
 
 4. **載入詞彙表與人員對照**：
-   - 全公司共用的 `references/glossary.md`。
+   - 通用的 `references/glossary.md`，加上使用者公司自己的 `$MINUTES_HOME/glossary.md`（有的話）。
    - 專案資料夾的 `會議紀錄/用詞對照.md`；舊專案可能放在任一層的 `會議用詞對照.md`，找到就用。
    - 專案資料夾的 `會議紀錄/人員對照.md`（中文名、英文名、屬於哪一方、常見的語者編號）。
 
@@ -155,7 +181,7 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
      最後匯出純文字讀回來印出。
    - 新建時自動設定一般存取權：使用者的公司網域，知道連結的人可以加註。公司網域取自登入帳號的信箱
      （name@example.com 就是 example.com）。個人 Gmail 帳號沒有公司網域，程式不分享，請使用者自己分享。
-     公司網域是 Google 在登入時給的 Google Workspace 網域；環境變數 `MINUTES_SHARE_DOMAIN` 可以指定別的網域，設成 `none` 就沒有公司網域。
+     公司網域是 Google 在登入時給的 Google Workspace 網域；`settings.json` 的 `share_domain`（或環境變數 `MINUTES_SHARE_DOMAIN`）可以指定別的網域，設成 `none` 就沒有公司網域。
      這個網域同時決定寄信時哪些收件人可以編輯文件，所以設成 `none` 之後，寄信也不會開編輯權限給任何人。
      文件已經有公司層級的權限時維持原設定；改版時不處理分享設定，保留使用者自己調過的設定。
    - 旁邊會留一個 `<md 檔>.gdoc.json`，記下文件 ID、網址、內容雜湊、修改時間。上傳 .docx 時也記在同名的 .md 旁邊。
@@ -181,7 +207,7 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
      寄完把寄件紀錄寫進 `.gdoc.json`；收件人裡有人已經收過就會被擋，真的要重寄加 `--again`。
      內文用寄件人寫給同事的口吻：稱呼、一句紀錄整理好了加網址、請他們直接在文件上補 [__]、改完跟寄件人說一聲，署名寄件人。
    - `scripts/notify.py` 是另一種寄法（用 Google 文件的分享通知寄），只在 Gmail 授權不能用時才用。
-   - 有設環境變數 `MINUTES_OWNER` 時，每個指令都會先確認登入的帳號就是那個信箱，
+   - `settings.json` 有 `owner`（或環境變數 `MINUTES_OWNER`）時，每個指令都會先確認登入的帳號就是那個信箱，
      不一樣就停下來，不會讀別的信箱，也不會用別的信箱寄信。
 9. **Google 設定**（第一次要用 Google 文件、Gmail、行事曆、通訊錄時才需要；只交 Word 檔不用設定）
 
@@ -217,13 +243,13 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
       - 個人 Gmail 選「外部」時，Google 每 7 天會讓登入失效；出現「GOOGLE LOGIN EXPIRED」就重跑第 6 步。
 
    授權範圍包含：建立和更新 Google 文件、讀信和寄信、讀行事曆和建立邀請、查公司通訊錄。
-   寄出的信寄件人顯示名稱用環境變數 `MINUTES_SENDER_NAME`；沒設就只顯示信箱。
+   寄出的信寄件人顯示名稱用 `settings.json` 的 `sender_name`（或環境變數 `MINUTES_SENDER_NAME`）；沒設就只顯示信箱。
 
 ## 6.5 從 Gmail、行事曆、通訊錄取資料的指令
 
 | 要做的事 | 指令 |
 |---|---|
-| 抓逐字稿附件，順便轉成 UTF-8 文字 | `scripts/workspace.py pull "has:attachment filename:txt newer_than:2d" <資料夾>` |
+| 抓逐字稿附件，順便轉成 UTF-8 文字 | `scripts/workspace.py pull "<搜尋條件，見第 0 節第 1 步>" <資料夾>` |
 | 查某天的會議（所有看得到的行事曆，含公司會議室的行事曆） | `scripts/workspace.py events <YYYY-MM-DD> [標題關鍵字]` |
 | 查同事信箱與部門 | `scripts/workspace.py who <名字>` |
 | 準備下次會議的邀請（預覽；加 `--send --confirm <確認碼>` 才建立並寄邀請，同一天同標題會被擋） | `scripts/workspace.py invite <YYYY-MM-DD> <HH:MM-HH:MM> <標題> <地點> <email,...>` |
@@ -233,7 +259,7 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
 
 ## 7. Word 檔（使用者要求時做；沒有 Google 登入時一律做）
 
-`scripts/md_to_docx.py <md 檔> [輸出.docx]`：A4、邊界 2.54 公分、微軟正黑體 11pt、標題深藍、二級標題深綠、
+`scripts/md_to_docx.py <md 檔> [輸出.docx]`：A4、邊界 2.54 公分、微軟正黑體 11pt、標題深藍、二級標題深綠（字型與顏色可在 `settings.json` 的 `style` 改）、
 表頭深藍底白字、頁尾置中頁碼，連結可以點、圖片照原比例縮到版面寬度。有裝 LibreOffice 的話，
 產出後用 `soffice --headless --convert-to pdf` 轉 PDF，看第一頁和最後一頁有沒有跑版。
 
@@ -242,14 +268,23 @@ description: "把會議逐字稿整理成繁體中文正式會議紀錄，發成
 1. 回覆第一行給 Google 文件網址（或 Word 檔路徑），接著列第 5 節的三類，最多再一兩句。
 2. 使用者在 Google 文件改完，以他的版本為準：`scripts/gdoc_to_md.py <文件 ID 或網址> <md 檔> --record <md 檔> --force` 拉回專案資料夾取代本機版本，
    再跑 `md_to_gdoc.py <md 檔> --accept-current`，之後要改版就從這一版接著改。
-   他改掉的專有名詞寫法，一併更新到該專案的 `會議紀錄/用詞對照.md`；跨專案都會用到的，更新 `references/glossary.md`。
+   他改掉的專有名詞寫法，一併更新到該專案的 `會議紀錄/用詞對照.md`；跨專案都會用到的，更新 `$MINUTES_HOME/glossary.md`（不要改 skill 資料夾裡的 `references/glossary.md`）。
 3. 與會者在 Google 文件上改過時，先拉回來比對，向使用者回報改了什麼，特別點出動到使用者決定或發言的地方；使用者看過、同意以與會者的版本為準之後，那一版就是定稿，不再改回來。
 4. 專案有交接說明（CLAUDE.md、handover 文件）時，檢查這次會議有沒有推翻原本的決策，有就更新。
 5. 使用者在對話裡更正紀錄時，改完紀錄，同一次把更正寫回對照表，下一場逐字稿出現同樣的錯就不用再問。
    聽錯的字寫進專案的 `會議紀錄/用詞對照.md`，例如「發禮券的是 A 公司，不是 B」；
    講者負責的事和常講的話題寫進 `會議紀錄/人員對照.md`，例如「講官網導流的是＜人名＞」。
+6. **檢查新版**：每次交付完跑 `scripts/check_update.py`（一天最多真的查一次，不會拖慢交付）。
+   - 印出 `UPDATE`：在回覆最後問使用者要不要更新，問的時候用一兩句講新版多了哪些新功能、改善了什麼
+     （照它印出的更新紀錄，用使用者看得懂的話寫，例如「新版可以自己改紀錄的字型和顏色，要更新嗎？」）。同一個新版只問一次。
+   - 其他結果（`UP TO DATE`、`SKIPPED`、`ALREADY ASKED`、`COULD NOT CHECK`）都不用跟使用者提。
+   - 使用者說要更新，或自己說「更新會議紀錄 skill」：skill 資料夾有 `.git` 就跑 `git -C <skill 資料夾> pull`；
+     沒有 `.git`（從 zip 裝的），就把 https://github.com/miou1107/vin-meeting-minutes-zh clone 到暫存資料夾，再用它換掉 skill 資料夾。
+     使用者的設定都在 `$MINUTES_HOME`，更新不會動到。更新完讀新的 `CHANGELOG.md` 最上面那一版，用一兩句告訴使用者多了什麼。
 
 ## 9. 在 claude.ai 網頁上使用時
+
+網頁上讀不到 `$MINUTES_HOME`：我方簡稱每次問使用者，詞彙表只用 `references/glossary.md`，沒有 `notes.md`。
 
 網頁上沒有這台電腦的 Google 設定，建不了 Google 文件，也讀不到 Gmail。改用 `scripts/md_to_docx.py` 交 Word 檔，
 請使用者自己上傳到 Google 雲端硬碟。

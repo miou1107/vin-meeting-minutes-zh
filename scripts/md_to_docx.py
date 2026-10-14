@@ -3,16 +3,21 @@
 Usage: md_to_docx.py <minutes.md> [out.docx]
 
 The layout is the company's standard meeting-minutes format:
-A4, 1-inch margins, Microsoft JhengHei 11pt; title lines centred, bold, navy 17pt;
+A4, 1-inch margins, Microsoft JhengHei 11pt; title lines centred, bold, navy (title_color) 17pt;
 「一、」 headings bold navy 14pt; 「（一）」 headings bold green 12pt; bullets and numbered
 lists with line 320 / after 60; body paragraphs line 340 / after 100; tables 9026 dxa wide,
-grey borders, navy header with white bold text; centred page number in the footer.
+grey borders, header row in title_color with white bold text; centred page number in the footer.
 Markdown supported: # / ## / ### headings, paragraphs, **bold**, bullet and numbered lists, pipe tables,
 [links](url) (kept as clickable links) and ![images](src) (data: URIs as Google's Markdown export writes them,
 http(s) URLs, or files next to the minutes; scaled down to the text width).
+
+The font and the three colours can be changed in $MINUTES_HOME/settings.json without touching the skill:
+  "style": {"font": "Microsoft JhengHei", "title_color": "#14304A", "section_color": "#1D6F68",
+            "link_color": "#1155CC"}
 """
 import base64
 import io
+import re
 import sys
 import urllib.parse
 import urllib.request
@@ -27,11 +32,25 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor, Twips
 from markdown_it import MarkdownIt
 
-FONT = 'Microsoft JhengHei'
-NAVY = RGBColor(0x14, 0x30, 0x4A)
-GREEN = RGBColor(0x1D, 0x6F, 0x68)
+sys.path.insert(0, str(Path(__file__).parent))
+from google_setup import settings  # noqa: E402  (standard library only; no Google login needed)
+
+STYLE = settings().get('style') if isinstance(settings().get('style'), dict) else {}
+
+
+def colour(key: str, default: str) -> RGBColor:
+    value = str(STYLE.get(key) or default)
+    if not re.fullmatch(r'#?[0-9A-Fa-f]{6}', value):
+        print(f'WARNING: style.{key} in settings.json is not a #RRGGBB colour; using {default}', file=sys.stderr)
+        value = default
+    return RGBColor.from_string(value.lstrip('#').upper())
+
+
+FONT = STYLE['font'] if isinstance(STYLE.get('font'), str) and STYLE['font'].strip() else 'Microsoft JhengHei'
+NAVY = colour('title_color', '#14304A')
+GREEN = colour('section_color', '#1D6F68')
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-LINK = RGBColor(0x11, 0x55, 0xCC)
+LINK = colour('link_color', '#1155CC')
 MAX_IMAGE = Cm(15.9)                 # A4 minus the two 2.54 cm margins
 BASE_DIR = [Path('.')]               # folder of the minutes being built, for relative image paths
 # tag -> (size pt, colour, space before twips, space after twips, centred)
@@ -137,7 +156,7 @@ def style_cell(cell, width, header):
         borders.append(element(f'w_{side}', w_val='single', w_color='A0A8B0', w_sz=4))
     pr.append(borders)
     if header:
-        pr.append(element('w_shd', w_fill='14304A', w_color='auto', w_val='clear'))
+        pr.append(element('w_shd', w_fill=str(NAVY), w_color='auto', w_val='clear'))
     margins = element('w_tcMar')
     for side, val in (('top', 80), ('left', 100), ('bottom', 80), ('right', 100)):
         margins.append(element(f'w_{side}', w_type='dxa', w_w=val))

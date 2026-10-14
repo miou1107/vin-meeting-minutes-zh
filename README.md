@@ -53,5 +53,6 @@
 
 - Claude Code 安裝：`git clone https://github.com/miou1107/vin-meeting-minutes-zh ~/.claude/skills/vin-meeting-minutes-zh`
 - Claude Code 更新：`git -C ~/.claude/skills/vin-meeting-minutes-zh pull`
-- 如果之前裝過舊名稱 meeting-minutes-zh，或更新時出現 unrelated histories 的錯誤，刪掉舊的資料夾再重新安裝（自己在 references/glossary.md 加過的詞先備份）：`rm -rf ~/.claude/skills/meeting-minutes-zh ~/.claude/skills/vin-meeting-minutes-zh && git clone https://github.com/miou1107/vin-meeting-minutes-zh ~/.claude/skills/vin-meeting-minutes-zh`
+- 使用者自己的設定、詞彙、偏好和 Google 登入都放在 `~/.config/vin-meeting-minutes-zh/`，不放在 skill 資料夾。更新、重裝 skill 都不會動到這些檔案，分享 skill 時也不會帶出去。
+- 如果之前裝過舊名稱 meeting-minutes-zh，或更新時出現 unrelated histories 的錯誤，刪掉舊的資料夾再重新安裝。刪之前，先把自己在 `references/glossary.md` 加過的詞搬到 `~/.config/vin-meeting-minutes-zh/glossary.md`：`rm -rf ~/.claude/skills/meeting-minutes-zh ~/.claude/skills/vin-meeting-minutes-zh && git clone https://github.com/miou1107/vin-meeting-minutes-zh ~/.claude/skills/vin-meeting-minutes-zh`
 - claude.ai 網頁版：下載這個 repo 的 zip 檔，到設定裡的 Skills 頁面上傳。
